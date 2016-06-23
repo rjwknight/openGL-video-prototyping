@@ -9,9 +9,10 @@
         <Grid.RowDefinitions>
             <RowDefinition Height="50" />
             <RowDefinition Height="*" />
+            <RowDefinition Height="*" />
         </Grid.RowDefinitions>
 
-
+            
         
 
         <Image  Margin="10" x:Name="image1" Stretch="Uniform" VerticalAlignment="Top" Grid.Row="1" StretchDirection="Both" HorizontalAlignment="Left"  Visibility="Hidden"/>
@@ -21,6 +22,19 @@
             <Button x:Name="PlayClip" Width="91" Height="26" Click="PlayClip_Click" IsEnabled="False"/>
             <CheckBox Content="Aspect Ratio" Checked="CheckBoxChanged" Unchecked="CheckBoxChanged" IsChecked="True" />
         </StackPanel>
+        <!-- <WindowsFormsHost x:Name="Host" Grid.Row="2" Height="100" Width="100" Background="Aqua" RenderTransformOrigin="-0.679,0.026"/> -->
+        
+
+        <Image x:Name="image" Source="Automization.png" Width="300" Height="200" Grid.Row="2">
+            <Image.ContextMenu>
+                <ContextMenu>
+                    <MenuItem Header="MenuItem #1" />
+                    <MenuItem Header="MenuItem #2" />
+                    <MenuItem Header="MenuItem #3" />
+                    <MenuItem Header="MenuItem #4" />
+                </ContextMenu>
+            </Image.ContextMenu>
+        </Image>
 
     </Grid>
 </Window>

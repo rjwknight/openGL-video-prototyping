@@ -5,6 +5,35 @@ using System.Windows.Controls;
 using System.Windows.Media;
 using Microsoft.Win32;
 using VidGrabNoForm;
+using System.Windows.Media.Imaging;
+
+using OpenTK;
+using OpenTK.Graphics;
+using OpenTK.Graphics.OpenGL;
+
+using System.Drawing;
+using System.Drawing.Imaging;
+using OpenTK.Graphics.OpenGL;
+using EnableCap = OpenTK.Graphics.OpenGL.EnableCap;
+using FramebufferAttachment = OpenTK.Graphics.OpenGL.FramebufferAttachment;
+using FramebufferErrorCode = OpenTK.Graphics.OpenGL.FramebufferErrorCode;
+using FramebufferTarget = OpenTK.Graphics.OpenGL.FramebufferTarget;
+using GL = OpenTK.Graphics.OpenGL.GL;
+using PixelFormat = OpenTK.Graphics.OpenGL.PixelFormat;
+using PixelInternalFormat = OpenTK.Graphics.OpenGL.PixelInternalFormat;
+using PixelType = OpenTK.Graphics.OpenGL.PixelType;
+using RenderbufferStorage = OpenTK.Graphics.OpenGL.RenderbufferStorage;
+using RenderbufferTarget = OpenTK.Graphics.OpenGL.RenderbufferTarget;
+using Size = System.Drawing.Size;
+using TextureMagFilter = OpenTK.Graphics.OpenGL.TextureMagFilter;
+using TextureMinFilter = OpenTK.Graphics.OpenGL.TextureMinFilter;
+using TextureParameterName = OpenTK.Graphics.OpenGL.TextureParameterName;
+using TextureTarget = OpenTK.Graphics.OpenGL.TextureTarget;
+using TextureWrapMode = OpenTK.Graphics.OpenGL.TextureWrapMode;
+
+
+
+
 
 namespace WpfApplication1
 {
@@ -34,9 +63,33 @@ namespace WpfApplication1
         private bool IsPlaying;
         private bool maintainAspectRatio = true;
 
+        private WriteableBitmap backbuffer;
+
+        private FrameBufferHandler framebufferHandler;
+
+        private int frames;
+
+        private DateTime lastMeasureTime;
+
+        private Renderer renderer;
+
         public MainWindow()
         {
             InitializeComponent();
+
+            this.renderer = new Renderer(new Size(400, 400));
+            this.framebufferHandler = new FrameBufferHandler();
+
+            GL.Enable(EnableCap.Texture2D);
+            System.Windows.Threading.DispatcherTimer timer = new System.Windows.Threading.DispatcherTimer();
+            timer.Interval = TimeSpan.FromMilliseconds(1);
+            timer.Tick += this.TimerOnTick;
+            timer.Start();
+            // Top panel is video feed
+            // Get BMP from video feed, write into framebuffer
+            // Bottom panel is the video image that is in the frame buffer, plus the OpenGL guff
+
+
 
             Vg = new VideoGrabberWPF();
             Vg.OnFirstFrameReceived += Vg_OnFirstFrameReceived;
@@ -130,5 +183,122 @@ namespace WpfApplication1
                 image1.Stretch = Stretch.Fill;
             }
         }
+
+        // Penguin
+        private void Render()
+        {
+            if (this.image.ActualWidth <= 0 || this.image.ActualHeight <= 0)
+            {
+                return;
+            }
+
+            this.framebufferHandler.Prepare(new Size((int)this.ActualWidth, (int)this.ActualHeight));
+
+            GL.MatrixMode(OpenTK.Graphics.OpenGL.MatrixMode.Projection);
+            GL.LoadIdentity();
+            float halfWidth = (float)(this.ActualWidth / 2);
+            float halfHeight = (float)(this.ActualHeight / 2);
+            GL.Ortho(-halfWidth, halfWidth, halfHeight, -halfHeight, 1000, -1000);
+            GL.Viewport(0, 0, (int)this.ActualWidth, (int)this.ActualHeight);
+
+            string filename2 = "C:\\Users\\hp\\image.bmp";
+            int loadTexture = LoadTexture(filename2);
+            //DrawImage(loadTexture);
+
+            this.renderer.Render();
+
+            GL.Finish();
+
+            this.framebufferHandler.Cleanup(ref this.backbuffer);
+           
+            if (this.backbuffer != null)
+            {
+                this.image.Source = this.backbuffer;
+            }
+
+            this.frames++;
+        }
+
+        // Penguin
+        private void TimerOnTick(object sender, EventArgs eventArgs)
+        {
+            if (DateTime.Now.Subtract(this.lastMeasureTime) > TimeSpan.FromSeconds(1))
+            {
+                this.Title = this.frames + "fps";
+                this.frames = 0;
+                this.lastMeasureTime = DateTime.Now;
+            }
+
+            this.Render();
+        }
+
+        static int LoadTexture(string filename)
+        {
+            if (String.IsNullOrEmpty(filename))
+                throw new ArgumentException(filename);
+
+            int id = GL.GenTexture();
+            GL.BindTexture(TextureTarget.Texture2D, id);
+
+            // We will not upload mipmaps, so disable mipmapping (otherwise the texture will not appear).
+            // We can use GL.GenerateMipmaps() or GL.Ext.GenerateMipmaps() to create
+            // mipmaps automatically. In that case, use TextureMinFilter.LinearMipmapLinear to enable them.
+            GL.TexParameter(TextureTarget.Texture2D, TextureParameterName.TextureMinFilter, (int)TextureMinFilter.Linear);
+            GL.TexParameter(TextureTarget.Texture2D, TextureParameterName.TextureMagFilter, (int)TextureMagFilter.Linear);
+
+            System.Drawing.Bitmap bmp = new System.Drawing.Bitmap(filename);
+            BitmapData bmp_data = bmp.LockBits(new Rectangle(0, 0, bmp.Width, bmp.Height), ImageLockMode.ReadOnly, System.Drawing.Imaging.PixelFormat.Format32bppArgb);
+
+            GL.TexImage2D(TextureTarget.Texture2D, 0, PixelInternalFormat.Rgba, bmp_data.Width, bmp_data.Height, 0,
+                OpenTK.Graphics.OpenGL.PixelFormat.Bgra, PixelType.UnsignedByte, bmp_data.Scan0);
+
+            bmp.UnlockBits(bmp_data);
+
+            return id;
+        }
+
+        void DrawImage(int textureID)
+        {
+            GL.MatrixMode(OpenTK.Graphics.OpenGL.MatrixMode.Projection);
+            GL.PushMatrix();
+            GL.LoadIdentity();
+            //glOrtho(0.0, glutGet(GLUT_WINDOW_WIDTH), 0.0, glutGet(GLUT_WINDOW_HEIGHT), -1.0, 1.0);
+            GL.MatrixMode(OpenTK.Graphics.OpenGL.MatrixMode.Modelview);
+            GL.PushMatrix();
+            GL.LoadIdentity();
+            //GL.Disable(OpenTK.Graphics.OpenGL.EnableCap.Lighting);
+
+            GL.Color3(1, 1, 1);
+            //GL.Enable(OpenTK.Graphics.OpenGL.EnableCap.Texture2D);
+            //GL.BindTexture(OpenTK.Graphics.OpenGL.EnableCap.Texture2D, textureID);
+
+            
+            // Draw a textured quad
+            GL.Begin(OpenTK.Graphics.OpenGL.BeginMode.Quads);
+            //GL.TexCoord2(0, 0);
+            GL.Vertex3(0, 0, 1000);
+
+            //GL.TexCoord2(0, 1);
+            GL.Vertex3(0, 100, 1000);
+
+            //GL.TexCoord2(1, 1);
+            GL.Vertex3(100, 100, 1000);
+
+            //GL.TexCoord2(1, 0);
+            GL.Vertex3(100, 0, 1000);
+            GL.End();
+
+            //GL.Disable(OpenTK.Graphics.OpenGL.EnableCap.Texture2D);
+            GL.PopMatrix();
+            
+            GL.MatrixMode(OpenTK.Graphics.OpenGL.MatrixMode.Projection);
+            GL.PopMatrix();
+
+            GL.MatrixMode(OpenTK.Graphics.OpenGL.MatrixMode.Modelview);
+            
+        }
+
     }
+
+
 }
